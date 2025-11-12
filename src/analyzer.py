@@ -111,8 +111,6 @@ def write_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str):
     s3_client.put_object(Bucket=bucket, Key=key, Body=buffer)
     logger.info(f"Uploaded {len(df)} rows to s3://{bucket}/{key}")
 
-
-# ================== Lambda Handler =================
 # ================== Lambda Handler with combined text =================
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -128,7 +126,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         parquet_files = list_parquet_files_from_s3(bucket_name, prefix="reddit_parquet/")
         if not parquet_files:
             logger.warning("No parquet files found in S3")
-            return {"statusCode": 200, "body": json.dumps({"status": "success", "message": "No files found"})}
+            return {
+                "statusCode": 200,
+                "body": json.dumps({
+                    "status": "success",
+                    "message": "No files found"
+                })
+            }
 
         prompt_file = os.environ.get("PROMPT_FILE", "prompt_template.jinja")
         results = []
@@ -176,7 +180,25 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 logger.error(f"Error processing file {key}: {str(e)}", exc_info=True)
                 continue
 
+        # Return after processing all files
         return {
             "statusCode": 200,
             "body": json.dumps({
-                "status": "succes
+                "status": "success",
+                "processed_files": len(results),
+                "s3_keys": results,
+                "timestamp": datetime.utcnow().isoformat()
+            }, indent=2)
+        }
+
+    except Exception as e:
+        logger.error(f"Error in lambda_handler: {str(e)}", exc_info=True)
+        return {
+            "statusCode": 500,
+            "body": json.dumps({
+                "status": "error",
+                "message": str(e),
+                "timestamp": datetime.utcnow().isoformat()
+            })
+        }
+
