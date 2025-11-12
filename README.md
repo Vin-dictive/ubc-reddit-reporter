@@ -88,7 +88,7 @@ ubc-reddit-reporter/
 
 6. **Deploy to AWS**
    ```bash
-   sam deploy --guided --stack-name my-reddit-lambda-stack
+   sam deploy --guided
    ```
    The `--guided` flag will prompt you for configuration values on first deployment.
 
@@ -401,7 +401,7 @@ import boto3
 import json
 
 # Initialize Lambda client
-lambda_client = boto3.client('lambda', region_name='us-east-1')
+lambda_client = boto3.client('lambda', region_name='us-west-2')
 
 # Invoke Reddit Fetcher
 reddit_fetcher_name = 'ubc-reddit-reporter-RedditFetcherFunction-<id>'
@@ -720,7 +720,7 @@ Before deploying, ensure you have:
 
 2. **Verified model availability** in your region:
    - Different models are available in different regions
-   - Claude models: us-east-1, us-west-2, ap-southeast-1, etc.
+   - Claude models: us-west-2, us-west-2, ap-southeast-1, etc.
    - Check AWS documentation for region availability
 
 3. **Configured model IDs** in your deployment:

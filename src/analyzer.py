@@ -13,7 +13,7 @@ logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
 # Initialize AWS clients
 s3_client = boto3.client('s3')
 bucket_name = os.environ.get('BUCKET_NAME')
-bedrock_region = os.environ.get('BEDROCK_REGION', os.environ.get('AWS_REGION', 'us-east-1'))
+bedrock_region = os.environ.get('BEDROCK_REGION', os.environ.get('AWS_REGION', 'us-west-2'))
 bedrock_client = boto3.client('bedrock-runtime', region_name=bedrock_region)
 
 # Bedrock model configuration - separate models for categorization and summarization

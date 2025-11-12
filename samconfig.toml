@@ -3,7 +3,7 @@ version = 0.1
 [default]
 [default.global.parameters]
 stack_name = "ubc-reddit-reporter"
-region = "us-east-1"
+region = "us-west-2"
 
 [default.build.parameters]
 cached = true

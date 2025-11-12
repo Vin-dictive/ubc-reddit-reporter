@@ -23,7 +23,7 @@ if [ -z "$FUNCTION_NAME_PARAM" ]; then
 fi
 
 STACK_NAME=${STACK_NAME:-ubc-reddit-reporter}
-REGION=${AWS_REGION:-us-east-1}
+REGION=${AWS_REGION:-us-west-2}
 
 echo "Invoking Lambda function: $FUNCTION_NAME_PARAM"
 echo "Stack: $STACK_NAME"

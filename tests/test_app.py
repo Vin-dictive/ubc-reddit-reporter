@@ -11,7 +11,7 @@ def lambda_context():
     context = Mock()
     context.function_name = "test-function"
     context.function_version = "1"
-    context.invoked_function_arn = "arn:aws:lambda:us-east-1:123456789012:function:test-function"
+    context.invoked_function_arn = "arn:aws:lambda:us-west-2:123456789012:function:test-function"
     context.memory_limit_in_mb = 128
     return context
 
