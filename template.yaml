@@ -11,6 +11,7 @@ Parameters:
     Default: anthropic.claude-3-sonnet-20240229-v1:0
     Description: Bedrock model ID to use for sentiment categorization
     AllowedValues:
+      - us.anthropic.claude-sonnet-4-5-20250929-v1:0
       - anthropic.claude-3-sonnet-20240229-v1:0
       - anthropic.claude-3-haiku-20240307-v1:0
       - anthropic.claude-3-opus-20240229-v1:0
@@ -26,9 +27,10 @@ Parameters:
 
   SummarizationModelId:
     Type: String
-    Default: anthropic.claude-3-sonnet-20240229-v1:0
+    Default: us.anthropic.claude-sonnet-4-5-20250929-v1:0
     Description: Bedrock model ID to use for text summarization
     AllowedValues:
+      - us.anthropic.claude-sonnet-4-5-20250929-v1:0
       - anthropic.claude-3-sonnet-20240229-v1:0
       - anthropic.claude-3-haiku-20240307-v1:0
       - anthropic.claude-3-opus-20240229-v1:0
@@ -111,6 +113,27 @@ Parameters:
     Type: String
     Default: "UBC"
     Description: Subreddit name to fetch posts from
+
+  PostmarkServerToken:
+    Type: String
+    Default: "08de53bb-ab96-4839-b5b7-168a4455e475"
+    Description: Postmark server token for sending emails
+    NoEcho: true
+
+  FromEmail:
+    Type: String
+    Default: "sender@example.com"
+    Description: Email address to send from
+
+  ToEmail:
+    Type: String
+    Default: "recipient@example.com"
+    Description: Email address to send to
+
+  TemplateAlias:
+    Type: String
+    Default: "comment-notification"
+    Description: Postmark template alias to use
   
 Conditions:
   RedditFetchScheduleEnabled: !Equals [!Ref EnableRedditFetchSchedule, "true"]
@@ -202,6 +225,7 @@ Resources:
                   - bedrock:InvokeModelWithResponseStream
                 Resource:
                   - !Sub 'arn:aws:bedrock:${AWS::Region}::foundation-model/*'
+                  - !Sub 'arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/*'
 
   # Reddit Fetcher Lambda Function
   RedditFetcherFunction:
@@ -288,6 +312,29 @@ Resources:
         Function: summarizer
         Environment: dev
 
+  # Emailer Lambda Function
+  EmailerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: emailer.lambda_handler
+      Role: !GetAtt RedditFetcherExecutionRole.Arn
+      Runtime: python3.11
+      Timeout: 300
+      MemorySize: 256
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref DataBucket
+          LOG_LEVEL: INFO
+          POSTMARK_SERVER_TOKEN: !Ref PostmarkServerToken
+          FROM_EMAIL: !Ref FromEmail
+          TO_EMAIL: !Ref ToEmail
+          TEMPLATE_ALIAS: !Ref TemplateAlias
+      Tags:
+        Project: ubc-reddit-reporter
+        Function: emailer
+        Environment: dev
+
 Outputs:
   RedditFetcherFunction:
     Description: "Reddit Fetcher Lambda Function ARN"
@@ -304,6 +351,9 @@ Outputs:
   SummarizerFunction:
     Description: "Summarizer Lambda Function ARN"
     Value: !GetAtt SummarizerFunction.Arn
+  EmailerFunction:
+    Description: "Emailer Lambda Function ARN"
+    Value: !GetAtt EmailerFunction.Arn
   DataBucketName:
     Description: "S3 Bucket Name"
     Value: !Ref DataBucket

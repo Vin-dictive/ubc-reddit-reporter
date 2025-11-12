@@ -16,11 +16,13 @@ if [ -z "$FUNCTION_NAME_PARAM" ]; then
   echo "  - RedditFetcherFunction (event: reddit-fetcher)"
   echo "  - AnalyzerFunction (event: analyzer)"
   echo "  - SummarizerFunction (event: summarizer)"
+  echo "  - EmailerFunction (event: emailer)"
   echo ""
   echo "Examples:"
   echo "  ./scripts/invoke-lambda.sh RedditFetcherFunction reddit-fetcher"
   echo "  ./scripts/invoke-lambda.sh AnalyzerFunction analyzer"
   echo "  ./scripts/invoke-lambda.sh SummarizerFunction summarizer"
+  echo "  ./scripts/invoke-lambda.sh EmailerFunction emailer"
   exit 1
 fi
 
@@ -42,6 +44,9 @@ elif [ "$FUNCTION_NAME_PARAM" = "AnalyzerFunction" ]; then
 elif [ "$FUNCTION_NAME_PARAM" = "SummarizerFunction" ]; then
   OUTPUT_KEY="SummarizerFunction"
   DEFAULT_EVENT="summarizer"
+elif [ "$FUNCTION_NAME_PARAM" = "EmailerFunction" ]; then
+  OUTPUT_KEY="EmailerFunction"
+  DEFAULT_EVENT="emailer"
 else
   # Try to use the parameter as-is (might be full function name)
   OUTPUT_KEY="$FUNCTION_NAME_PARAM"
@@ -77,6 +82,8 @@ elif [ "$EVENT_TYPE" = "analyzer" ]; then
   EVENT_FILE="events/analyzer-event.json"
 elif [ "$EVENT_TYPE" = "summarizer" ]; then
   EVENT_FILE="events/summarizer-event.json"
+elif [ "$EVENT_TYPE" = "emailer" ]; then
+  EVENT_FILE="events/emailer-event.json"
 else
   EVENT_FILE="events/${EVENT_TYPE}-event.json"
 fi

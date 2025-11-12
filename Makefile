@@ -40,6 +40,9 @@ invoke-analyzer: ## Invoke the analyzer function locally
 invoke-summarizer: ## Invoke the summarizer function locally
 	sam local invoke SummarizerFunction -e events/summarizer-event.json
 
+invoke-emailer: ## Invoke the emailer function locally
+	sam local invoke EmailerFunction -e events/emailer-event.json
+
 invoke-reddit-fetcher-remote: ## Invoke the deployed Reddit fetcher function remotely (requires AWS CLI)
 	@./scripts/invoke-lambda.sh RedditFetcherFunction reddit-fetcher
 
@@ -48,6 +51,9 @@ invoke-analyzer-remote: ## Invoke the deployed analyzer function remotely (requi
 
 invoke-summarizer-remote: ## Invoke the deployed summarizer function remotely (requires AWS CLI)
 	@./scripts/invoke-lambda.sh SummarizerFunction summarizer
+
+invoke-emailer-remote: ## Invoke the deployed emailer function remotely (requires AWS CLI)
+	@./scripts/invoke-lambda.sh EmailerFunction emailer
 
 local-api: ## Start local API server
 	sam local start-api
