@@ -213,6 +213,8 @@ Resources:
       Runtime: python3.11
       Timeout: 300
       MemorySize: 512
+      Layers:
+        - arn:aws:lambda:us-west-2:336392948345:layer:AWSSDKPandas-Python311:13
       Environment:
         Variables:
           REDDIT_CLIENT_ID: !Ref RedditClientId

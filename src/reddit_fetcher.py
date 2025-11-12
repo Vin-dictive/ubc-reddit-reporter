@@ -5,6 +5,8 @@ import logging
 import boto3
 import praw
 import pandas as pd
+import numpy as np
+import pandas as pd
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 from botocore.exceptions import ClientError
