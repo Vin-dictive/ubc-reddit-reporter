@@ -26,7 +26,7 @@ AWS Lambda-based serverless application for reporting Reddit UBC content with se
 ## Project Structure
 
 ```
-reddit-ubc-reporter/
+ubc-reddit-reporter/
 ├── src/
 │   ├── __init__.py
 │   ├── reddit_fetcher.py  # Reddit fetcher Lambda function
@@ -60,13 +60,13 @@ reddit-ubc-reporter/
 1. **Clone the repository**
    ```bash
    git clone <your-repo-url>
-   cd reddit-ubc-reporter
+   cd ubc-reddit-reporter
    ```
 
 2. **Create conda env**
    ```bash
-   conda create -n reddit-ubc-reporter python=3.11 
-   conda activate reddit-ubc-reporter
+   conda create -n ubc-reddit-reporter python=3.11 
+   conda activate ubc-reddit-reporter
    ```
 
 3. **Install dependencies**
@@ -166,7 +166,7 @@ Create a `.env` file (based on `.env.example`) with your configuration:
 - `BEDROCK_REGION`: AWS region for Bedrock (defaults to AWS_REGION)
 - `REDDIT_CLIENT_ID`: Reddit API Client ID (required for Reddit integration)
 - `REDDIT_CLIENT_SECRET`: Reddit API Client Secret (required for Reddit integration)
-- `REDDIT_USER_AGENT`: Reddit API User Agent string (default: `reddit-ubc-reporter/1.0`)
+- `REDDIT_USER_AGENT`: Reddit API User Agent string (default: `ubc-reddit-reporter/1.0`)
 - `REDDIT_SUBREDDIT`: Subreddit name to fetch posts from (default: `UBC`)
 
 ### Model Selection Guide
@@ -339,7 +339,7 @@ Invoke the Lambda functions directly using AWS CLI:
 ```bash
 # Get the function name from stack outputs
 REDDIT_FETCHER=$(aws cloudformation describe-stacks \
-  --stack-name reddit-ubc-reporter \
+  --stack-name ubc-reddit-reporter \
   --query 'Stacks[0].Outputs[?OutputKey==`RedditFetcherFunction`].OutputValue' \
   --output text)
 
@@ -356,7 +356,7 @@ cat response.json | jq
 ```bash
 # Get the function name from stack outputs
 ANALYZER=$(aws cloudformation describe-stacks \
-  --stack-name reddit-ubc-reporter \
+  --stack-name ubc-reddit-reporter \
   --query 'Stacks[0].Outputs[?OutputKey==`AnalyzerFunction`].OutputValue' \
   --output text)
 
@@ -379,8 +379,8 @@ cat response.json | jq
 
 1. Go to AWS Lambda Console
 2. Find your function:
-   - `reddit-ubc-reporter-RedditFetcherFunction-<id>` (for Reddit fetching)
-   - `reddit-ubc-reporter-AnalyzerFunction-<id>` (for analysis)
+   - `ubc-reddit-reporter-RedditFetcherFunction-<id>` (for Reddit fetching)
+   - `ubc-reddit-reporter-AnalyzerFunction-<id>` (for analysis)
 3. Click "Test" tab
 4. Create a new test event:
    - Event name: `scheduled-event-test`
@@ -404,7 +404,7 @@ import json
 lambda_client = boto3.client('lambda', region_name='us-east-1')
 
 # Invoke Reddit Fetcher
-reddit_fetcher_name = 'reddit-ubc-reporter-RedditFetcherFunction-<id>'
+reddit_fetcher_name = 'ubc-reddit-reporter-RedditFetcherFunction-<id>'
 response = lambda_client.invoke(
     FunctionName=reddit_fetcher_name,
     InvocationType='RequestResponse',
@@ -414,7 +414,7 @@ result = json.loads(response['Payload'].read())
 print("Reddit Fetcher:", json.dumps(result, indent=2))
 
 # Invoke Analyzer
-analyzer_name = 'reddit-ubc-reporter-AnalyzerFunction-<id>'
+analyzer_name = 'ubc-reddit-reporter-AnalyzerFunction-<id>'
 response = lambda_client.invoke(
     FunctionName=analyzer_name,
     InvocationType='RequestResponse',
@@ -442,7 +442,7 @@ make invoke-analyzer-remote         # Analyzer
 
 **Prerequisites:**
 - AWS CLI configured with appropriate credentials
-- Stack name set (default: `reddit-ubc-reporter`)
+- Stack name set (default: `ubc-reddit-reporter`)
 - Functions deployed
 
 **Benefits:**
@@ -599,12 +599,12 @@ make invoke-analyzer-remote
 ```bash
 # Get function names from stack outputs
 REDDIT_FETCHER=$(aws cloudformation describe-stacks \
-  --stack-name reddit-ubc-reporter \
+  --stack-name ubc-reddit-reporter \
   --query 'Stacks[0].Outputs[?OutputKey==`RedditFetcherFunction`].OutputValue' \
   --output text)
 
 ANALYZER=$(aws cloudformation describe-stacks \
-  --stack-name reddit-ubc-reporter \
+  --stack-name ubc-reddit-reporter \
   --query 'Stacks[0].Outputs[?OutputKey==`AnalyzerFunction`].OutputValue' \
   --output text)
 
@@ -683,7 +683,7 @@ To enable Reddit data fetching, you need to set up a Reddit API application:
    - Go to https://www.reddit.com/prefs/apps
    - Click "create another app" or "create app"
    - Fill in the form:
-     - **Name**: `reddit-ubc-reporter` (or any name)
+     - **Name**: `ubc-reddit-reporter` (or any name)
      - **App type**: Select "script"
      - **Description**: Optional
      - **About URL**: Optional
@@ -693,12 +693,12 @@ To enable Reddit data fetching, you need to set up a Reddit API application:
 2. **Get Your Credentials**:
    - **Client ID**: The string under your app name (looks like: `abc123def456ghi`)
    - **Client Secret**: The "secret" field (looks like: `xyz789_secret_key_abc123`)
-   - **User Agent**: Use format: `reddit-ubc-reporter/1.0` (platform:username:version)
+   - **User Agent**: Use format: `ubc-reddit-reporter/1.0` (platform:username:version)
 
 3. **Configure in Environment Variables**:
    - Set `REDDIT_CLIENT_ID` to your Client ID
    - Set `REDDIT_CLIENT_SECRET` to your Client Secret
-   - Set `REDDIT_USER_AGENT` (default: `reddit-ubc-reporter/1.0`)
+   - Set `REDDIT_USER_AGENT` (default: `ubc-reddit-reporter/1.0`)
    - Set `REDDIT_SUBREDDIT` to the subreddit name (default: `UBC`)
 
 4. **Reddit API Rate Limits**:

@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  reddit-ubc-reporter
+  ubc-reddit-reporter
 
   Serverless application with separate Lambda functions for Reddit fetching and analysis
 
@@ -229,7 +229,7 @@ Resources:
             Enabled: !If [RedditFetchScheduleEnabled, true, false]
             Description: Scheduled execution for fetching Reddit posts
       Tags:
-        Project: reddit-ubc-reporter
+        Project: ubc-reddit-reporter
         Function: reddit-fetcher
         Environment: dev
 
@@ -258,7 +258,7 @@ Resources:
             Enabled: !If [AnalysisScheduleEnabled, true, false]
             Description: Scheduled execution for sentiment analysis and summarization
       Tags:
-        Project: reddit-ubc-reporter
+        Project: ubc-reddit-reporter
         Function: analyzer
         Environment: dev
 

@@ -7,7 +7,7 @@
   "time": "2024-11-11T00:00:00Z",
   "region": "us-east-1",
   "resources": [
-    "arn:aws:events:us-east-1:814306248688:rule/reddit-ubc-reporter-RedditFetchSchedule"
+    "arn:aws:events:us-east-1:814306248688:rule/ubc-reddit-reporter-RedditFetchSchedule"
   ],
   "detail": {}
 }

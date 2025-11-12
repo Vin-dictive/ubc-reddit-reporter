@@ -2,7 +2,7 @@ version = 0.1
 
 [default]
 [default.global.parameters]
-stack_name = "reddit-ubc-reporter"
+stack_name = "ubc-reddit-reporter"
 region = "us-east-1"
 
 [default.build.parameters]
@@ -18,7 +18,7 @@ confirm_changeset = true
 resolve_s3 = true
 image_repositories = []
 parameter_overrides = "CategorizationModelId=\"meta.llama3-8b-instruct-v1:0\" SummarizationModelId=\"meta.llama3-8b-instruct-v1:0\" RedditFetchSchedule=\"rate(7 days)\" AnalysisSchedule=\"rate(7 days)\" EnableRedditFetchSchedule=\"false\" EnableAnalysisSchedule=\"false\" RedditClientId=\"uO49EXH_Nz2Z-Yp67Xjypg\" RedditUserAgent=\"scraper\" RedditSubreddit=\"UBC\""
-s3_prefix = "reddit-ubc-reporter"
+s3_prefix = "ubc-reddit-reporter"
 disable_rollback = true
 
 [default.package.parameters]
