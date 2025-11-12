@@ -1,0 +1,39 @@
+version = 0.1
+
+[default]
+[default.global.parameters]
+stack_name = "reddit-ubc-reporter"
+region = "us-east-1"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+resolve_s3 = true
+image_repositories = []
+parameter_overrides = "CategorizationModelId=\"meta.llama3-8b-instruct-v1:0\" SummarizationModelId=\"meta.llama3-8b-instruct-v1:0\" RedditFetchSchedule=\"rate(7 days)\" AnalysisSchedule=\"rate(7 days)\" EnableRedditFetchSchedule=\"false\" EnableAnalysisSchedule=\"false\" RedditClientId=\"uO49EXH_Nz2Z-Yp67Xjypg\" RedditUserAgent=\"scraper\" RedditSubreddit=\"UBC\""
+s3_prefix = "reddit-ubc-reporter"
+disable_rollback = true
+
+[default.package.parameters]
+resolve_s3 = true
+
+[default.sync.parameters]
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters.container_env_var_file]
+# Uncomment and modify the path to your .env file for local testing
+# .env
+

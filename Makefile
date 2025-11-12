@@ -1,0 +1,55 @@
+.PHONY: help install build deploy test clean invoke local-api validate
+
+help: ## Show this help message
+	@echo 'Usage: make [target]'
+	@echo ''
+	@echo 'Available targets:'
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+install: ## Install Python dependencies
+	pip install -r src/requirements.txt
+	pip install pytest pytest-mock
+
+build: ## Build the SAM application
+	sam build
+
+deploy: ## Deploy the SAM application
+	sam deploy
+
+deploy-guided: ## Deploy with guided prompts (first time)
+	sam deploy --guided
+
+test: ## Run tests
+	pytest tests/ -v
+
+test-coverage: ## Run tests with coverage
+	pytest tests/ -v --cov=src --cov-report=html
+
+clean: ## Clean build artifacts
+	rm -rf .aws-sam/
+	rm -rf build/
+	find . -type d -name __pycache__ -exec rm -r {} +
+	find . -type f -name "*.pyc" -delete
+
+invoke-reddit-fetcher: ## Invoke the Reddit fetcher function locally
+	sam local invoke RedditFetcherFunction -e events/reddit-fetcher-event.json
+
+invoke-analyzer: ## Invoke the analyzer function locally
+	sam local invoke AnalyzerFunction -e events/analyzer-event.json
+
+invoke-reddit-fetcher-remote: ## Invoke the deployed Reddit fetcher function remotely (requires AWS CLI)
+	@./scripts/invoke-lambda.sh RedditFetcherFunction reddit-fetcher
+
+invoke-analyzer-remote: ## Invoke the deployed analyzer function remotely (requires AWS CLI)
+	@./scripts/invoke-lambda.sh AnalyzerFunction analyzer
+
+local-api: ## Start local API server
+	sam local start-api
+
+validate: ## Validate SAM template
+	sam validate
+
+lint: ## Lint Python code
+	flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+	flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+

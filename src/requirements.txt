@@ -1,0 +1,8 @@
+boto3
+botocore
+praw
+
+# Testing dependencies (optional, install separately for development)
+pytest>=7.4.0
+pytest-mock>=3.11.1
+
