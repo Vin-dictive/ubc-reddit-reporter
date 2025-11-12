@@ -157,7 +157,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             }
 
         # Prompt file always located under src/prompts/
-        prompt_file = os.environ.get("PROMPT_FILE", "prompt_template.jinja")
+        prompt_file = os.environ.get("PROMPT_FILE", "classify_post.jinja")
         results = []
 
         for key in parquet_files:
