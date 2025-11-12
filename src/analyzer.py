@@ -17,7 +17,11 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
 # ================== AWS Clients ===================
 s3_client = boto3.client('s3')
-bedrock_client = boto3.client('bedrock-runtime', region_name=os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1")))
+bedrock_client = boto3.client(
+    'bedrock-runtime',
+    region_name=os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
+)
+
 bucket_name = os.environ.get("BUCKET_NAME")
 bedrock_region = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
 
@@ -32,26 +36,29 @@ class CategoryResponse(BaseModel):
     category: str = Field(description="Predicted category name from the predefined list.")
 
 
-
 # ================== Helper Functions ==============
 def render_prompt(prompt_file: str, content: str) -> str:
-    """Render Jinja2 prompt with the content. Handles relative and absolute paths."""
-    # Try absolute and relative paths safely
+    """
+    Render Jinja2 prompt template located under src/prompts/.
+    Handles both local and deployed Lambda directory structures.
+    """
+    base_dir = os.path.dirname(__file__)
     possible_paths = [
-        prompt_file,
-        os.path.join(os.getcwd(), prompt_file),
-        os.path.join(os.path.dirname(__file__), prompt_file),
-        os.path.join(os.path.dirname(__file__), "prompts", os.path.basename(prompt_file))
+        os.path.join(base_dir, "prompts", os.path.basename(prompt_file)),        # e.g. src/prompts/prompt_template.jinja
+        os.path.join(base_dir, "src", "prompts", os.path.basename(prompt_file)), # for zip/Lambda
+        os.path.join(os.getcwd(), "src", "prompts", os.path.basename(prompt_file)),
+        prompt_file  # fallback if absolute path passed
     ]
 
-    # Find a valid file path
     for path in possible_paths:
         if os.path.exists(path):
+            logger.info(f"Using prompt file: {path}")
             with open(path, "r", encoding="utf-8") as f:
                 template = Template(f.read())
             return template.render(content=content)
 
-    raise FileNotFoundError(f"Prompt file not found in any of: {possible_paths}")
+    raise FileNotFoundError(f"Prompt file not found. Tried paths: {possible_paths}")
+
 
 def invoke_bedrock_model(prompt: str, model_id: str = BEDROCK_MODEL_ID) -> str:
     """Invoke Bedrock model directly with boto3."""
@@ -79,9 +86,11 @@ def invoke_bedrock_model(prompt: str, model_id: str = BEDROCK_MODEL_ID) -> str:
     else:
         return str(result)
 
+
 def classify_text(content: str, model_id: str, prompt_file: str) -> CategoryResponse:
     """
     Classify text using a Bedrock model with Jinja2 prompts.
+    Automatically resolves prompt from src/prompts/.
     """
     rendered_prompt = render_prompt(prompt_file, content)
     full_prompt = f"{rendered_prompt}\n\nRespond with JSON format: {{\"category\": \"category_name\"}}"
@@ -92,10 +101,8 @@ def classify_text(content: str, model_id: str, prompt_file: str) -> CategoryResp
         result = json.loads(output_text.strip())
         return CategoryResponse(category=result.get("category", "Unknown"))
     except Exception:
-        # fallback — extract first line heuristically
         cleaned = output_text.strip().split("\n")[0]
         return CategoryResponse(category=cleaned)
-
 
 
 # ================== S3 & Parquet Utilities =========
@@ -109,12 +116,14 @@ def list_parquet_files_from_s3(bucket: str, prefix: str = "raw_data/") -> List[s
                 files.append(obj["Key"])
     return files
 
+
 def read_parquet_from_s3(bucket: str, key: str) -> pd.DataFrame:
     """Read parquet file from S3 into DataFrame."""
     response = s3_client.get_object(Bucket=bucket, Key=key)
     buffer = io.BytesIO(response['Body'].read())
     df = pd.read_parquet(buffer, engine="pyarrow")
     return df
+
 
 def write_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str):
     """Write DataFrame as parquet to S3."""
@@ -124,7 +133,8 @@ def write_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str):
     s3_client.put_object(Bucket=bucket, Key=key, Body=buffer)
     logger.info(f"Uploaded {len(df)} rows to s3://{bucket}/{key}")
 
-# ================== Lambda Handler with combined text =================
+
+# ================== Lambda Handler =================
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     AWS Lambda handler to classify text from Parquet files in S3 using Bedrock LLM.
@@ -135,7 +145,6 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         if not bucket_name:
             raise ValueError("BUCKET_NAME environment variable not set")
 
-        # Step 1: List parquet files
         parquet_files = list_parquet_files_from_s3(bucket_name, prefix="reddit_parquet/")
         if not parquet_files:
             logger.warning("No parquet files found in S3")
@@ -147,10 +156,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 })
             }
 
+        # Prompt file always located under src/prompts/
         prompt_file = os.environ.get("PROMPT_FILE", "prompt_template.jinja")
         results = []
 
-        # Step 2: Process each parquet file
         for key in parquet_files:
             try:
                 df = read_parquet_from_s3(bucket_name, key)
@@ -159,18 +168,13 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     continue
 
                 # Determine available text columns
-                text_columns = []
-                for col in ["Title", "Post_Text", "Body", "content"]:
-                    if col in df.columns:
-                        text_columns.append(col)
+                text_columns = [col for col in ["Title", "Post_Text", "Body", "content"] if col in df.columns]
                 if not text_columns:
                     logger.warning(f"No text columns found in {key}, skipping")
                     continue
 
-                # Combine available columns per row
                 combined_texts = df[text_columns].fillna('').agg('. '.join, axis=1).str.strip()
 
-                # Classify each combined text
                 classifications = []
                 for content in combined_texts:
                     if not content:
@@ -181,7 +185,6 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         "category": category_response.category
                     })
 
-                # Save classification results as Parquet
                 if classifications:
                     result_df = pd.DataFrame(classifications)
                     now = datetime.utcnow()
@@ -193,7 +196,6 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 logger.error(f"Error processing file {key}: {str(e)}", exc_info=True)
                 continue
 
-        # Return after processing all files
         return {
             "statusCode": 200,
             "body": json.dumps({
@@ -214,4 +216,3 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "timestamp": datetime.utcnow().isoformat()
             })
         }
-
