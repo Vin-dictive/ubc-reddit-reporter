@@ -239,6 +239,8 @@ Resources:
   AnalyzerFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Layers:
+        - arn:aws:lambda:us-west-2:336392948345:layer:AWSSDKPandas-Python311:13
       CodeUri: src/
       Handler: analyzer.lambda_handler
       Role: !GetAtt AnalyzerExecutionRole.Arn
