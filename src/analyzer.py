@@ -113,9 +113,11 @@ def write_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str):
 
 
 # ================== Lambda Handler =================
+# ================== Lambda Handler with combined text =================
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     AWS Lambda handler to classify text from Parquet files in S3 using Bedrock LLM.
+    Combines available text columns (e.g., Title, Post_Text) dynamically.
     """
     try:
         logger.info(f"Event received: {json.dumps(event)}")
@@ -129,7 +131,6 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return {"statusCode": 200, "body": json.dumps({"status": "success", "message": "No files found"})}
 
         prompt_file = os.environ.get("PROMPT_FILE", "prompt_template.jinja")
-
         results = []
 
         # Step 2: Process each parquet file
@@ -140,24 +141,30 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     logger.warning(f"File {key} is empty, skipping")
                     continue
 
-                # Assume text column is named 'content'
-                if "content" not in df.columns:
-                    logger.warning(f"'content' column not found in {key}, skipping")
+                # Determine available text columns
+                text_columns = []
+                for col in ["Title", "Post_Text", "Body", "content"]:
+                    if col in df.columns:
+                        text_columns.append(col)
+                if not text_columns:
+                    logger.warning(f"No text columns found in {key}, skipping")
                     continue
 
-                # Classify each row
+                # Combine available columns per row
+                combined_texts = df[text_columns].fillna('').agg('. '.join, axis=1).str.strip()
+
+                # Classify each combined text
                 classifications = []
-                for idx, row in df.iterrows():
-                    content = str(row["content"])
-                    if not content.strip():
+                for content in combined_texts:
+                    if not content:
                         continue
                     category_response = classify_text(content, BEDROCK_MODEL_ID, prompt_file)
                     classifications.append({
-                        "content": content,
+                        "combined_text": content,
                         "category": category_response.category
                     })
 
-                # Step 3: Save classification results as Parquet
+                # Save classification results as Parquet
                 if classifications:
                     result_df = pd.DataFrame(classifications)
                     now = datetime.utcnow()
@@ -166,26 +173,10 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     results.append(result_key)
 
             except Exception as e:
-                logger.error(f"Error processing file {key}: {str(e)}")
+                logger.error(f"Error processing file {key}: {str(e)}", exc_info=True)
                 continue
 
         return {
             "statusCode": 200,
             "body": json.dumps({
-                "status": "success",
-                "processed_files": len(results),
-                "s3_keys": results,
-                "timestamp": datetime.utcnow().isoformat()
-            }, indent=2)
-        }
-
-    except Exception as e:
-        logger.error(f"Error in lambda_handler: {str(e)}", exc_info=True)
-        return {
-            "statusCode": 500,
-            "body": json.dumps({
-                "status": "error",
-                "message": str(e),
-                "timestamp": datetime.utcnow().isoformat()
-            })
-        }
+                "status": "succes
