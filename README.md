@@ -101,7 +101,7 @@ The SAM template creates the following AWS resources:
 1. **Reddit Fetcher Function**: `RedditFetcherFunction`
    - Runtime: Python 3.11
    - Memory: 512 MB
-   - Timeout: 300 seconds (5 minutes)
+   - Timeout: 900 seconds (15 minutes)
    - Handler: `reddit_fetcher.lambda_handler`
    - Trigger: EventBridge scheduled event (weekly by default)
    - Permissions: S3 read/write access
@@ -110,7 +110,7 @@ The SAM template creates the following AWS resources:
 2. **Analyzer Function**: `AnalyzerFunction`
    - Runtime: Python 3.11
    - Memory: 512 MB
-   - Timeout: 300 seconds (5 minutes)
+   - Timeout: 900 seconds (15 minutes)
    - Handler: `analyzer.lambda_handler`
    - Trigger: EventBridge scheduled event (weekly by default)
    - Permissions: S3 read/write access + Bedrock model invocation
