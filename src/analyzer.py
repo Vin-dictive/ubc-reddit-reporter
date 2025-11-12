@@ -19,11 +19,11 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 s3_client = boto3.client('s3')
 bedrock_client = boto3.client(
     'bedrock-runtime',
-    region_name=os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
+    region_name=os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-west-2"))
 )
 
 bucket_name = os.environ.get("BUCKET_NAME")
-bedrock_region = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
+bedrock_region = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-west-2"))
 
 # ================== Bedrock Config =================
 BEDROCK_MODEL_ID = os.environ.get(
