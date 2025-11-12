@@ -9,8 +9,7 @@ import boto3
 import pandas as pd
 from jinja2 import Template
 from pydantic import BaseModel, Field
-from langchain_aws import BedrockLLM  # ensure langchain-aws is installed
-from langchain_core.output_parsers import PydanticOutputParser
+
 
 # ================== Logging Setup ==================
 logger = logging.getLogger()
@@ -18,6 +17,7 @@ logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
 # ================== AWS Clients ===================
 s3_client = boto3.client('s3')
+bedrock_client = boto3.client('bedrock-runtime', region_name=os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1")))
 bucket_name = os.environ.get("BUCKET_NAME")
 bedrock_region = os.environ.get("BEDROCK_REGION", os.environ.get("AWS_REGION", "us-east-1"))
 
@@ -27,9 +27,11 @@ BEDROCK_MODEL_ID = os.environ.get(
     "anthropic.claude-3-sonnet-20240229-v1:0"
 )
 
-# ================== Structured Output Model =======
+# ================== Structured Output Models =======
 class CategoryResponse(BaseModel):
     category: str = Field(description="Predicted category name from the predefined list.")
+
+
 
 # ================== Helper Functions ==============
 def render_prompt(prompt_file: str, content: str) -> str:
@@ -38,33 +40,50 @@ def render_prompt(prompt_file: str, content: str) -> str:
         template = Template(f.read())
     return template.render(content=content)
 
-def get_bedrock_model(model_id: str = BEDROCK_MODEL_ID):
-    """Return AWS Bedrock LLM instance."""
-    return BedrockLLM(model_id=model_id, region_name=bedrock_region)
-
-def classify_text(content: str, llm_model, prompt_file: str) -> CategoryResponse:
-    """
-    Classify text using a Bedrock LLM model with Jinja2 prompts.
-    """
-    parser = PydanticOutputParser(pydantic_object=CategoryResponse)
-    rendered_prompt = render_prompt(prompt_file, content)
-    full_prompt = f"{rendered_prompt}\n\nFollow the format below:\n{parser.get_format_instructions()}"
-
-    response = llm_model.invoke(full_prompt)
-    
-    if isinstance(response, dict):
-        output_text = response.get("content", "")
-    elif hasattr(response, "content"):
-        output_text = response.content
+def invoke_bedrock_model(prompt: str, model_id: str = BEDROCK_MODEL_ID) -> str:
+    """Invoke Bedrock model directly with boto3."""
+    if model_id.startswith("anthropic.claude"):
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 1000,
+            "messages": [{"role": "user", "content": prompt}]
+        })
     else:
-        output_text = str(response)
+        body = json.dumps({"prompt": prompt, "max_gen_len": 1000})
+    
+    response = bedrock_client.invoke_model(
+        modelId=model_id,
+        body=body,
+        contentType="application/json"
+    )
+    
+    result = json.loads(response['body'].read())
+    
+    if model_id.startswith("anthropic.claude"):
+        return result['content'][0]['text']
+    elif model_id.startswith("meta.llama"):
+        return result['generation']
+    else:
+        return str(result)
+
+def classify_text(content: str, model_id: str, prompt_file: str) -> CategoryResponse:
+    """
+    Classify text using a Bedrock model with Jinja2 prompts.
+    """
+    rendered_prompt = render_prompt(prompt_file, content)
+    full_prompt = f"{rendered_prompt}\n\nRespond with JSON format: {{\"category\": \"category_name\"}}"
+
+    output_text = invoke_bedrock_model(full_prompt, model_id)
 
     try:
-        return parser.parse(output_text)
+        result = json.loads(output_text.strip())
+        return CategoryResponse(category=result.get("category", "Unknown"))
     except Exception:
         # fallback — extract first line heuristically
         cleaned = output_text.strip().split("\n")[0]
         return CategoryResponse(category=cleaned)
+
+
 
 # ================== S3 & Parquet Utilities =========
 def list_parquet_files_from_s3(bucket: str, prefix: str = "raw_data/") -> List[str]:
@@ -92,6 +111,7 @@ def write_parquet_to_s3(df: pd.DataFrame, bucket: str, key: str):
     s3_client.put_object(Bucket=bucket, Key=key, Body=buffer)
     logger.info(f"Uploaded {len(df)} rows to s3://{bucket}/{key}")
 
+
 # ================== Lambda Handler =================
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
@@ -103,12 +123,11 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             raise ValueError("BUCKET_NAME environment variable not set")
 
         # Step 1: List parquet files
-        parquet_files = list_parquet_files_from_s3(bucket_name, prefix="raw_data/")
+        parquet_files = list_parquet_files_from_s3(bucket_name, prefix="reddit_parquet/")
         if not parquet_files:
             logger.warning("No parquet files found in S3")
             return {"statusCode": 200, "body": json.dumps({"status": "success", "message": "No files found"})}
 
-        llm_model = get_bedrock_model(BEDROCK_MODEL_ID)
         prompt_file = os.environ.get("PROMPT_FILE", "prompt_template.jinja")
 
         results = []
@@ -132,7 +151,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     content = str(row["content"])
                     if not content.strip():
                         continue
-                    category_response = classify_text(content, llm_model, prompt_file)
+                    category_response = classify_text(content, BEDROCK_MODEL_ID, prompt_file)
                     classifications.append({
                         "content": content,
                         "category": category_response.category

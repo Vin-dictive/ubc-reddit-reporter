@@ -17,7 +17,7 @@ capabilities = "CAPABILITY_IAM"
 confirm_changeset = true
 resolve_s3 = true
 image_repositories = []
-parameter_overrides = "CategorizationModelId=\"anthropic.claude-3-sonnet-20240229-v1:0\" SummarizationModelId=\"anthropic.claude-3-sonnet-20240229-v1:0\" RedditFetchSchedule=\"rate(7 days)\" AnalysisSchedule=\"rate(7 days)\" EnableRedditFetchSchedule=\"false\" EnableAnalysisSchedule=\"false\" RedditClientId=\"uO49EXH_Nz2Z-Yp67Xjypg\" RedditUserAgent=\"scraper\" RedditSubreddit=\"UBC\""
+parameter_overrides = "CategorizationModelId=\"anthropic.claude-3-sonnet-20240229-v1:0\" SummarizationModelId=\"anthropic.claude-3-sonnet-20240229-v1:0\" RedditFetchSchedule=\"rate(7 days)\" AnalysisSchedule=\"rate(7 days)\" EnableRedditFetchSchedule=\"true\" EnableAnalysisSchedule=\"true\" RedditClientId=\"uO49EXH_Nz2Z-Yp67Xjypg\" RedditUserAgent=\"scraper\" RedditSubreddit=\"UBC\""
 s3_prefix = "ubc-reddit-reporter"
 disable_rollback = true
 

@@ -37,11 +37,17 @@ invoke-reddit-fetcher: ## Invoke the Reddit fetcher function locally
 invoke-analyzer: ## Invoke the analyzer function locally
 	sam local invoke AnalyzerFunction -e events/analyzer-event.json
 
+invoke-summarizer: ## Invoke the summarizer function locally
+	sam local invoke SummarizerFunction -e events/summarizer-event.json
+
 invoke-reddit-fetcher-remote: ## Invoke the deployed Reddit fetcher function remotely (requires AWS CLI)
 	@./scripts/invoke-lambda.sh RedditFetcherFunction reddit-fetcher
 
 invoke-analyzer-remote: ## Invoke the deployed analyzer function remotely (requires AWS CLI)
 	@./scripts/invoke-lambda.sh AnalyzerFunction analyzer
+
+invoke-summarizer-remote: ## Invoke the deployed summarizer function remotely (requires AWS CLI)
+	@./scripts/invoke-lambda.sh SummarizerFunction summarizer
 
 local-api: ## Start local API server
 	sam local start-api

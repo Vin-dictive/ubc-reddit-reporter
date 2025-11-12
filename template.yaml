@@ -251,8 +251,7 @@ Resources:
         Variables:
           BUCKET_NAME: !Ref DataBucket
           LOG_LEVEL: INFO
-          CATEGORIZATION_MODEL_ID: !Ref CategorizationModelId
-          SUMMARIZATION_MODEL_ID: !Ref SummarizationModelId
+          BEDROCK_MODEL_ID: !Ref CategorizationModelId
           BEDROCK_REGION: !Ref AWS::Region
       Events:
         AnalysisSchedule:
@@ -260,10 +259,33 @@ Resources:
           Properties:
             Schedule: !Ref AnalysisSchedule
             Enabled: !If [AnalysisScheduleEnabled, true, false]
-            Description: Scheduled execution for sentiment analysis and summarization
+            Description: Scheduled execution for sentiment analysis
       Tags:
         Project: ubc-reddit-reporter
         Function: analyzer
+        Environment: dev
+
+  # Summarizer Lambda Function
+  SummarizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Layers:
+        - arn:aws:lambda:us-west-2:336392948345:layer:AWSSDKPandas-Python311:13
+      CodeUri: src/
+      Handler: summarizer.lambda_handler
+      Role: !GetAtt AnalyzerExecutionRole.Arn
+      Runtime: python3.11
+      Timeout: 900
+      MemorySize: 512
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref DataBucket
+          LOG_LEVEL: INFO
+          BEDROCK_MODEL_ID: !Ref SummarizationModelId
+          BEDROCK_REGION: !Ref AWS::Region
+      Tags:
+        Project: ubc-reddit-reporter
+        Function: summarizer
         Environment: dev
 
 Outputs:
@@ -279,6 +301,9 @@ Outputs:
   AnalyzerFunctionRole:
     Description: "IAM Role for Analyzer function"
     Value: !GetAtt AnalyzerExecutionRole.Arn
+  SummarizerFunction:
+    Description: "Summarizer Lambda Function ARN"
+    Value: !GetAtt SummarizerFunction.Arn
   DataBucketName:
     Description: "S3 Bucket Name"
     Value: !Ref DataBucket
