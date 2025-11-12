@@ -8,7 +8,7 @@ Description: >
 Parameters:
   CategorizationModelId:
     Type: String
-    Default: meta.llama3-8b-instruct-v1:0
+    Default: anthropic.claude-3-sonnet-20240229-v1:0
     Description: Bedrock model ID to use for sentiment categorization
     AllowedValues:
       - anthropic.claude-3-sonnet-20240229-v1:0
@@ -241,7 +241,7 @@ Resources:
       Handler: analyzer.lambda_handler
       Role: !GetAtt AnalyzerExecutionRole.Arn
       Runtime: python3.11
-      Timeout: 10000
+      Timeout: 900
       MemorySize: 512
       Environment:
         Variables:
