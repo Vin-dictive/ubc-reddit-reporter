@@ -1,244 +1,151 @@
 import json
 import os
+import io
 import logging
 import boto3
-from datetime import datetime, timedelta
-from typing import Dict, Any, List
+import praw
+import pandas as pd
+from datetime import datetime, timedelta, timezone
+from typing import List, Dict, Any
 from botocore.exceptions import ClientError
 
-# Configure logging
+# ============ Logging Setup ============
 logger = logging.getLogger()
-logger.setLevel(os.environ.get('LOG_LEVEL', 'INFO'))
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 
-# Reddit API
-try:
-    import praw
-    PRAW_AVAILABLE = True
-except ImportError:
-    PRAW_AVAILABLE = False
-    logger.warning("PRAW not available. Reddit integration will be disabled.")
-
-# Initialize AWS clients
+# ============ AWS Clients ============
 s3_client = boto3.client('s3')
-bucket_name = os.environ.get('BUCKET_NAME')
+bucket_name = os.environ.get("BUCKET_NAME")
 
-# Reddit API configuration
-REDDIT_CLIENT_ID = os.environ.get('REDDIT_CLIENT_ID')
-REDDIT_CLIENT_SECRET = os.environ.get('REDDIT_CLIENT_SECRET')
-REDDIT_USER_AGENT = os.environ.get('REDDIT_USER_AGENT', 'scraper')
-REDDIT_SUBREDDIT = os.environ.get('REDDIT_SUBREDDIT', 'UBC')
+# ============ Reddit API Config ============
+REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID")
+REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET")
+REDDIT_USER_AGENT = os.environ.get("REDDIT_USER_AGENT", "lambda_reddit_scraper")
+REDDIT_SUBREDDITS = os.environ.get("REDDIT_SUBREDDITS", "UBC").split(",")
 
 
-def fetch_reddit_posts_from_last_week(subreddit_name: str = REDDIT_SUBREDDIT) -> List[Dict[str, Any]]:
+# ============ Core Function ============
+
+def fetch_reddit_posts(subreddit_name: str, days_back: int = 7) -> pd.DataFrame:
     """
-    Fetch Reddit posts from the last week using PRAW.
+    Fetch recent Reddit posts (and comments) from a subreddit.
+    Returns a DataFrame.
+    """
+    if not all([REDDIT_CLIENT_ID, REDDIT_CLIENT_SECRET, REDDIT_USER_AGENT]):
+        raise ValueError("Missing Reddit credentials in environment variables.")
     
-    Args:
-        subreddit_name: Name of the subreddit to fetch posts from
+    reddit = praw.Reddit(
+        client_id=REDDIT_CLIENT_ID,
+        client_secret=REDDIT_CLIENT_SECRET,
+        user_agent=REDDIT_USER_AGENT
+    )
+
+    subreddit = reddit.subreddit(subreddit_name)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=days_back)
+    
+    posts_dict = {
+        "Title": [],
+        "Post_Text": [],
+        "Post_URL": [],
+        "Comments": [],
+        "Created_UTC": [],
+        "Subreddit": [],
+    }
+    
+    logger.info(f"Fetching posts from r/{subreddit_name} for last {days_back} days")
+    count = 0
+    for post in subreddit.new(limit=1000):
+        post_time = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+        if post_time < cutoff:
+            break
         
-    Returns:
-        List of dictionaries containing post data
+        comments = []
+        try:
+            post.comments.replace_more(limit=None)
+            comments = [c.body for c in post.comments.list()]
+        except Exception:
+            pass
+        
+        posts_dict["Title"].append(post.title)
+        posts_dict["Post_Text"].append(post.selftext)
+        posts_dict["Post_URL"].append(post.url)
+        posts_dict["Comments"].append(comments)
+        posts_dict["Created_UTC"].append(post_time.isoformat())
+        posts_dict["Subreddit"].append(subreddit_name)
+        count += 1
+
+    logger.info(f"Fetched {count} posts from r/{subreddit_name}")
+    return pd.DataFrame(posts_dict)
+
+
+def store_parquet_in_s3(df: pd.DataFrame, subreddit_name: str, days_back: int) -> str:
     """
-    if not PRAW_AVAILABLE:
-        raise ImportError("PRAW library is not installed. Install it with: pip install praw")
+    Convert DataFrame to Parquet and upload to S3.
+    """
+    if df.empty:
+        logger.warning(f"No posts found for r/{subreddit_name}, skipping S3 upload.")
+        return None
+
+    now = datetime.now(timezone.utc)
+    old_date = (now - timedelta(days=days_back)).strftime('%Y_%m_%d')
+    today_date = now.strftime('%Y_%m_%d')
     
-    if not REDDIT_CLIENT_ID or not REDDIT_CLIENT_SECRET:
-        raise ValueError("Reddit API credentials not configured. Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET environment variables.")
-    
+    key = f"reddit_parquet/{subreddit_name}_{today_date}_{old_date}.parquet"
+    buffer = io.BytesIO()
+    df.to_parquet(buffer, index=False, engine="pyarrow")
+    buffer.seek(0)
+
     try:
-        # Initialize Reddit API client
-        reddit = praw.Reddit(
-            client_id=REDDIT_CLIENT_ID,
-            client_secret=REDDIT_CLIENT_SECRET,
-            user_agent=REDDIT_USER_AGENT
-        )
-        
-        # Get subreddit
-        subreddit = reddit.subreddit(subreddit_name)
-        logger.info(f"Fetching posts from r/{subreddit_name}")
-        
-        # Calculate timestamp for one week ago
-        one_week_ago = datetime.utcnow() - timedelta(days=7)
-        one_week_ago_timestamp = one_week_ago.timestamp()
-        
-        posts = []
-        
-        # Fetch posts from the last week
-        # Use 'new' sorting to get recent posts
-        for submission in subreddit.new(limit=1000):  # Limit to avoid rate limits
-            # Check if post is from the last week
-            if submission.created_utc >= one_week_ago_timestamp:
-                # Extract post data
-                post_data = {
-                    'id': submission.id,
-                    'title': submission.title,
-                    'selftext': submission.selftext,
-                    'author': str(submission.author) if submission.author else '[deleted]',
-                    'created_utc': submission.created_utc,
-                    'created_datetime': datetime.utcfromtimestamp(submission.created_utc).isoformat(),
-                    'score': submission.score,
-                    'num_comments': submission.num_comments,
-                    'url': submission.url,
-                    'permalink': submission.permalink,
-                    'subreddit': str(submission.subreddit),
-                    'is_self': submission.is_self,
-                    'link_flair_text': submission.link_flair_text,
-                    # Combine title and selftext for analysis
-                    'content': f"{submission.title}\n\n{submission.selftext}".strip()
-                }
-                posts.append(post_data)
-            else:
-                # Posts are sorted by new, so if we hit an old post, we can break
-                break
-        
-        logger.info(f"Fetched {len(posts)} posts from r/{subreddit_name} from the last week")
-        return posts
-        
-    except Exception as e:
-        logger.error(f"Error fetching Reddit posts: {str(e)}", exc_info=True)
-        raise
-
-
-def store_reddit_posts_in_s3(posts: List[Dict[str, Any]], bucket: str, prefix: str = 'raw_data/') -> List[str]:
-    """
-    Store Reddit posts in S3 under the specified prefix.
-    Uses post ID to ensure uniqueness - will overwrite if post already exists.
-    
-    Args:
-        posts: List of post dictionaries
-        bucket: S3 bucket name
-        prefix: S3 prefix to store posts under
-        
-    Returns:
-        List of S3 keys where posts were stored
-    """
-    stored_keys = []
-    current_date = datetime.utcnow().strftime('%Y-%m-%d')
-    stored_count = 0
-    skipped_count = 0
-    
-    try:
-        # Store each post as a separate JSON file
-        for post in posts:
-            # Create S3 key with date and post ID (post ID ensures uniqueness)
-            post_date = datetime.utcfromtimestamp(post['created_utc']).strftime('%Y-%m-%d')
-            key = f"{prefix}{post_date}/post_{post['id']}.json"
-            
-            try:
-                # Store post data as JSON
-                s3_client.put_object(
-                    Bucket=bucket,
-                    Key=key,
-                    Body=json.dumps(post, indent=2),
-                    ContentType='application/json'
-                )
-                stored_keys.append(key)
-                stored_count += 1
-                logger.debug(f"Stored post {post['id']} to s3://{bucket}/{key}")
-            except ClientError as e:
-                logger.error(f"Error storing post {post['id']} to S3: {str(e)}")
-                skipped_count += 1
-                continue
-        
-        # Also store a summary file with all posts metadata
-        summary_key = f"{prefix}{current_date}/summary_{datetime.utcnow().strftime('%H%M%S')}.json"
-        summary = {
-            'date': current_date,
-            'timestamp': datetime.utcnow().isoformat(),
-            'total_posts': len(posts),
-            'stored_count': stored_count,
-            'skipped_count': skipped_count,
-            'posts': [{'id': p['id'], 'title': p['title'], 'created_datetime': p['created_datetime'], 'score': p.get('score', 0)} for p in posts]
-        }
         s3_client.put_object(
-            Bucket=bucket,
-            Key=summary_key,
-            Body=json.dumps(summary, indent=2),
-            ContentType='application/json'
+            Bucket=bucket_name,
+            Key=key,
+            Body=buffer,
+            ContentType='application/octet-stream'
         )
-        stored_keys.append(summary_key)
-        
-        logger.info(f"Stored {stored_count} posts to S3 under prefix: {prefix} (skipped: {skipped_count})")
-        return stored_keys
-        
+        logger.info(f"Uploaded {len(df)} posts from r/{subreddit_name} to s3://{bucket_name}/{key}")
+        return key
     except ClientError as e:
-        logger.error(f"Error storing posts to S3: {str(e)}")
-        raise
-    except Exception as e:
-        logger.error(f"Error processing posts for S3: {str(e)}")
+        logger.error(f"Error uploading {subreddit_name} parquet to S3: {e}")
         raise
 
+
+# ============ Lambda Handler ============
 
 def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
-    AWS Lambda handler function for Reddit data fetching.
-    
-    Fetches Reddit posts from the last week and stores them in S3.
-    Triggered by EventBridge scheduled event.
-    
-    Args:
-        event: Lambda event data (EventBridge scheduled event)
-        context: Lambda context object
-        
-    Returns:
-        Response dictionary with status and results
+    AWS Lambda handler to fetch Reddit posts from multiple subreddits
+    and store them as Parquet files in S3.
     """
+    logger.info(f"Event received: {json.dumps(event)}")
+
+    if not bucket_name:
+        raise ValueError("BUCKET_NAME environment variable is not set")
+
     try:
-        logger.info(f"Event received: {json.dumps(event)}")
-        
-        if not bucket_name:
-            raise ValueError("BUCKET_NAME environment variable is not set")
-        
-        # Fetch Reddit posts from the last week
-        if not PRAW_AVAILABLE:
-            raise ImportError("PRAW library is not installed. Install it with: pip install praw")
-        
-        if not REDDIT_CLIENT_ID or not REDDIT_CLIENT_SECRET:
-            raise ValueError("Reddit API credentials not configured. Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET environment variables.")
-        
-        logger.info("Fetching Reddit posts from the last week...")
-        posts = fetch_reddit_posts_from_last_week(REDDIT_SUBREDDIT)
-        
-        if not posts:
-            logger.warning("No Reddit posts found from the last week")
-            return {
-                "statusCode": 200,
-                "body": json.dumps({
-                    "status": "success",
-                    "message": "No Reddit posts found from the last week",
-                    "timestamp": datetime.utcnow().isoformat(),
-                    "bucket_name": bucket_name,
-                    "subreddit": REDDIT_SUBREDDIT,
-                    "posts_fetched": 0,
-                    "posts_stored": 0
-                })
-            }
-        
-        # Store posts in S3
-        logger.info(f"Storing {len(posts)} posts in S3...")
-        stored_keys = store_reddit_posts_in_s3(posts, bucket_name, prefix='raw_data/')
-        
+        days_back = int(event.get("days_back", 7))
+        stored_files = []
+
+        for subreddit_name in REDDIT_SUBREDDITS:
+            df = fetch_reddit_posts(subreddit_name.strip(), days_back)
+            key = store_parquet_in_s3(df, subreddit_name.strip(), days_back)
+            if key:
+                stored_files.append(key)
+
         result = {
             "status": "success",
-            "message": "Reddit posts fetched and stored successfully",
             "timestamp": datetime.utcnow().isoformat(),
-            "bucket_name": bucket_name,
-            "subreddit": REDDIT_SUBREDDIT,
-            "posts_fetched": len(posts),
-            "posts_stored": len([k for k in stored_keys if 'summary' not in k]),
-            "s3_keys": stored_keys[:10],  # Include first 10 keys for reference
-            "total_s3_files": len(stored_keys)
+            "bucket": bucket_name,
+            "subreddits": REDDIT_SUBREDDITS,
+            "files_stored": stored_files,
+            "total_files": len(stored_files)
         }
-        
-        logger.info(f"Reddit fetcher completed: {len(posts)} posts fetched, {len(stored_keys)} files stored")
-        
-        return {
-            "statusCode": 200,
-            "body": json.dumps(result, indent=2)
-        }
-        
+
+        logger.info(f"Successfully stored {len(stored_files)} files to S3.")
+        return {"statusCode": 200, "body": json.dumps(result, indent=2)}
+
     except Exception as e:
-        logger.error(f"Error in Reddit fetcher: {str(e)}", exc_info=True)
+        logger.error(f"Error in lambda_handler: {str(e)}", exc_info=True)
         return {
             "statusCode": 500,
             "body": json.dumps({
@@ -247,4 +154,3 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "timestamp": datetime.utcnow().isoformat()
             })
         }
-
