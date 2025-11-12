@@ -35,10 +35,23 @@ class CategoryResponse(BaseModel):
 
 # ================== Helper Functions ==============
 def render_prompt(prompt_file: str, content: str) -> str:
-    """Render Jinja2 prompt with the content."""
-    with open(prompt_file, "r") as f:
-        template = Template(f.read())
-    return template.render(content=content)
+    """Render Jinja2 prompt with the content. Handles relative and absolute paths."""
+    # Try absolute and relative paths safely
+    possible_paths = [
+        prompt_file,
+        os.path.join(os.getcwd(), prompt_file),
+        os.path.join(os.path.dirname(__file__), prompt_file),
+        os.path.join(os.path.dirname(__file__), "prompts", os.path.basename(prompt_file))
+    ]
+
+    # Find a valid file path
+    for path in possible_paths:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                template = Template(f.read())
+            return template.render(content=content)
+
+    raise FileNotFoundError(f"Prompt file not found in any of: {possible_paths}")
 
 def invoke_bedrock_model(prompt: str, model_id: str = BEDROCK_MODEL_ID) -> str:
     """Invoke Bedrock model directly with boto3."""
