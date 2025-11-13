@@ -326,10 +326,10 @@ Resources:
         Variables:
           BUCKET_NAME: !Ref DataBucket
           LOG_LEVEL: INFO
-          POSTMARK_SERVER_TOKEN: !Ref PostmarkServerToken
-          FROM_EMAIL: !Ref FromEmail
-          TO_EMAIL: !Ref ToEmail
-          TEMPLATE_ALIAS: !Ref TemplateAlias
+          POSTMARK_SERVER_TOKEN: 08de53bb-ab96-4839-b5b7-168a4455e475
+          FROM_EMAIL: sender@example.com
+          TO_EMAIL: recipient@example.com
+          TEMPLATE_ALIAS: comment-notification
       Tags:
         Project: ubc-reddit-reporter
         Function: emailer
