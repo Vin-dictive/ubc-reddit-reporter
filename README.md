@@ -4,9 +4,11 @@ AWS Lambda-based serverless application for reporting Reddit UBC content with se
 
 ## Features
 
-- **Separated Architecture**: Two independent Lambda functions for better separation of concerns
+- **Separated Architecture**: Four independent Lambda functions for better separation of concerns
   - **Reddit Fetcher Function**: Fetches Reddit posts and stores in S3
-  - **Analyzer Function**: Performs sentiment analysis and summarization using Bedrock
+  - **Analyzer Function**: Performs sentiment analysis using Bedrock
+  - **Summarizer Function**: Generates summaries using Bedrock
+  - **Emailer Function**: Sends email notifications via Postmark
 - **Reddit Integration**: Automatically fetches posts from Reddit (default: r/UBC) from the last week
   - Uses Reddit API (PRAW) to retrieve post data
   - Stores posts in S3 under `raw_data/` prefix
@@ -30,13 +32,17 @@ ubc-reddit-reporter/
 ├── src/
 │   ├── __init__.py
 │   ├── reddit_fetcher.py  # Reddit fetcher Lambda function
-│   └── analyzer.py        # Analyzer Lambda function
+│   ├── analyzer.py        # Analyzer Lambda function
+│   ├── summarizer.py      # Summarizer Lambda function
+│   └── emailer.py         # Emailer Lambda function
 ├── tests/                  # Unit tests
 │   ├── __init__.py
 │   └── test_app.py
 ├── events/                 # Event test files
 │   ├── reddit-fetcher-event.json  # Reddit fetcher event
-│   └── analyzer-event.json        # Analyzer event
+│   ├── analyzer-event.json        # Analyzer event
+│   ├── summarizer-event.json      # Summarizer event
+│   └── emailer-event.json         # Emailer event
 ├── scripts/                # Utility scripts
 │   └── invoke-lambda.sh   # Script to invoke deployed functions
 ├── template.yaml           # SAM template defining AWS resources
@@ -101,7 +107,7 @@ The SAM template creates the following AWS resources:
 1. **Reddit Fetcher Function**: `RedditFetcherFunction`
    - Runtime: Python 3.11
    - Memory: 512 MB
-   - Timeout: 900 seconds (15 minutes)
+   - Timeout: 300 seconds (5 minutes)
    - Handler: `reddit_fetcher.lambda_handler`
    - Trigger: EventBridge scheduled event (weekly by default)
    - Permissions: S3 read/write access
@@ -114,7 +120,25 @@ The SAM template creates the following AWS resources:
    - Handler: `analyzer.lambda_handler`
    - Trigger: EventBridge scheduled event (weekly by default)
    - Permissions: S3 read/write access + Bedrock model invocation
-   - Function: Performs sentiment categorization and summarization
+   - Function: Performs sentiment categorization
+
+3. **Summarizer Function**: `SummarizerFunction`
+   - Runtime: Python 3.11
+   - Memory: 512 MB
+   - Timeout: 900 seconds (15 minutes)
+   - Handler: `summarizer.lambda_handler`
+   - Trigger: Manual invocation only
+   - Permissions: S3 read/write access + Bedrock model invocation
+   - Function: Generates comprehensive summaries using Bedrock
+
+4. **Emailer Function**: `EmailerFunction`
+   - Runtime: Python 3.11
+   - Memory: 256 MB
+   - Timeout: 300 seconds (5 minutes)
+   - Handler: `emailer.lambda_handler`
+   - Trigger: Manual invocation only
+   - Permissions: S3 read access
+   - Function: Sends email notifications via Postmark API
 
 ### Other Resources
 
@@ -152,7 +176,23 @@ The SAM template creates the following AWS resources:
    make invoke-analyzer
    ```
 
-**Note**: Both functions are triggered by EventBridge schedules in production. For local testing, use the event files provided in the `events/` directory.
+3. **Test summarizer function**
+   ```bash
+   sam local invoke SummarizerFunction -e events/summarizer-event.json
+   
+   # Or use Make command
+   make invoke-summarizer
+   ```
+
+4. **Test emailer function**
+   ```bash
+   sam local invoke EmailerFunction -e events/emailer-event.json
+   
+   # Or use Make command
+   make invoke-emailer
+   ```
+
+**Note**: Reddit Fetcher and Analyzer functions are triggered by EventBridge schedules in production. Summarizer and Emailer functions are manual invocation only. For local testing, use the event files provided in the `events/` directory.
 
 ## Environment Variables
 
@@ -168,6 +208,10 @@ Create a `.env` file (based on `.env.example`) with your configuration:
 - `REDDIT_CLIENT_SECRET`: Reddit API Client Secret (required for Reddit integration)
 - `REDDIT_USER_AGENT`: Reddit API User Agent string (default: `ubc-reddit-reporter/1.0`)
 - `REDDIT_SUBREDDIT`: Subreddit name to fetch posts from (default: `UBC`)
+- `POSTMARK_SERVER_TOKEN`: Postmark API server token for sending emails
+- `FROM_EMAIL`: Email address to send from (default: `sender@example.com`)
+- `TO_EMAIL`: Email address to send to (default: `recipient@example.com`)
+- `TEMPLATE_ALIAS`: Postmark template alias to use (default: `comment-notification`)
 
 ### Model Selection Guide
 
@@ -217,8 +261,8 @@ sam deploy --guided
 This will:
 1. Prompt for stack name
 2. Prompt for AWS region
-3. Prompt for categorization model ID (default: `meta.llama3-8b-instruct-v1:0`)
-4. Prompt for summarization model ID (default: `anthropic.claude-3-sonnet-20240229-v1:0`)
+3. Prompt for categorization model ID (default: `anthropic.claude-3-sonnet-20240229-v1:0`)
+4. Prompt for summarization model ID (default: `us.anthropic.claude-sonnet-4-5-20250929-v1:0`)
 5. Prompt for Reddit fetch schedule (default: `rate(7 days)`)
 6. Prompt to enable Reddit fetch schedule (default: `true`)
 7. Prompt for analysis schedule (default: `rate(7 days)`)
@@ -227,9 +271,13 @@ This will:
 10. Prompt for Reddit Client Secret (optional, leave empty if not using Reddit API)
 11. Prompt for Reddit User Agent (default: `scraper`)
 12. Prompt for Reddit Subreddit (default: `UBC`)
-13. Prompt for confirm changeset
-14. Create S3 bucket for deployment artifacts
-15. Deploy the stack
+13. Prompt for Postmark Server Token (default: provided token)
+14. Prompt for From Email (default: `sender@example.com`)
+15. Prompt for To Email (default: `recipient@example.com`)
+16. Prompt for Template Alias (default: `comment-notification`)
+17. Prompt for confirm changeset
+18. Create S3 bucket for deployment artifacts
+19. Deploy the stack
 
 ### Deploy with Custom Models, Schedules, and Reddit Credentials
 
@@ -369,6 +417,40 @@ aws lambda invoke \
 cat response.json | jq
 ```
 
+**Invoke Summarizer:**
+```bash
+# Get the function name from stack outputs
+SUMMARIZER=$(aws cloudformation describe-stacks \
+  --stack-name ubc-reddit-reporter \
+  --query 'Stacks[0].Outputs[?OutputKey==`SummarizerFunction`].OutputValue' \
+  --output text)
+
+# Invoke summarizer
+aws lambda invoke \
+  --function-name $SUMMARIZER \
+  --payload '{"source":"aws.events"}' \
+  response.json
+
+cat response.json | jq
+```
+
+**Invoke Emailer:**
+```bash
+# Get the function name from stack outputs
+EMAILER=$(aws cloudformation describe-stacks \
+  --stack-name ubc-reddit-reporter \
+  --query 'Stacks[0].Outputs[?OutputKey==`EmailerFunction`].OutputValue' \
+  --output text)
+
+# Invoke emailer
+aws lambda invoke \
+  --function-name $EMAILER \
+  --payload '{"source":"aws.events"}' \
+  response.json
+
+cat response.json | jq
+```
+
 **Benefits:**
 - Direct Lambda invocation
 - Faster execution
@@ -435,9 +517,17 @@ Use the provided script to invoke the deployed functions:
 # Invoke Analyzer
 ./scripts/invoke-lambda.sh AnalyzerFunction analyzer
 
+# Invoke Summarizer
+./scripts/invoke-lambda.sh SummarizerFunction summarizer
+
+# Invoke Emailer
+./scripts/invoke-lambda.sh EmailerFunction emailer
+
 # Or use Make commands
 make invoke-reddit-fetcher-remote  # Reddit fetcher
 make invoke-analyzer-remote         # Analyzer
+make invoke-summarizer-remote       # Summarizer
+make invoke-emailer-remote          # Emailer
 ```
 
 **Prerequisites:**
