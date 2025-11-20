@@ -1,12 +1,11 @@
 # Reddit UBC Reporter
 
-AWS Lambda-based serverless application for reporting Reddit UBC content with sentiment analysis using Amazon Bedrock, built with AWS SAM (Serverless Application Model).
-
+AWS Lambda-based serverless application for reporting Reddit UBC content for categorization and summarization using Amazon Bedrock, built with AWS SAM (Serverless Application Model) as Part of UBC CIC GenAI Hackathon
 ## Features
 
 - **Separated Architecture**: Four independent Lambda functions for better separation of concerns
   - **Reddit Fetcher Function**: Fetches Reddit posts and stores in S3
-  - **Analyzer Function**: Performs sentiment analysis using Bedrock
+  - **Analyzer Function**: Performs categorization using Bedrock
   - **Summarizer Function**: Generates summaries using Bedrock
   - **Emailer Function**: Sends email notifications via Postmark
 - **Reddit Integration**: Automatically fetches posts from Reddit (default: r/UBC) from the last week
@@ -14,12 +13,12 @@ AWS Lambda-based serverless application for reporting Reddit UBC content with se
   - Stores posts in S3 under `raw_data/` prefix
   - Independent EventBridge schedule for data fetching
 - **Dual-Model Architecture**: Uses separate models for categorization and summarization
-  - **Categorization**: Uses Llama models (default) to categorize sentiment of posts
+  - **Categorization**: Uses Llama models (default) to categorize groups of posts
   - **Summarization**: Uses Claude models (default) to generate comprehensive summaries
 - **Flexible Model Selection**: Choose different Bedrock models for each task
 - **Multi-Model Support**: Supports Claude (v2/v3), Llama 2/3, and Amazon Titan models
 - **Automatic Processing**: Processes Reddit posts from the last 7 days
-- **Sentiment Categories**: Categorizes text as Positive, Negative, Neutral, or Mixed
+- **Categories**: Categorizes text as the following [src/prompts/classify_post.jinja](https://github.com/Vin-dictive/ubc-reddit-reporter/blob/main/src/prompts/classify_post.jinja)
 - **Comprehensive Summaries**: Generates summaries with main themes, key insights, and overall tone
 - **Results Storage**: Saves analysis results back to S3
 - **Independent EventBridge Schedules**: Separate schedules for fetching and analysis
@@ -120,7 +119,7 @@ The SAM template creates the following AWS resources:
    - Handler: `analyzer.lambda_handler`
    - Trigger: EventBridge scheduled event (weekly by default)
    - Permissions: S3 read/write access + Bedrock model invocation
-   - Function: Performs sentiment categorization
+   - Function: Performs categorization
 
 3. **Summarizer Function**: `SummarizerFunction`
    - Runtime: Python 3.11
@@ -201,7 +200,7 @@ Create a `.env` file (based on `.env.example`) with your configuration:
 - `AWS_REGION`: AWS region for deployment
 - `AWS_ACCOUNT_ID`: Your AWS account ID
 - `LOG_LEVEL`: Logging level (INFO, DEBUG, etc.)
-- `CATEGORIZATION_MODEL_ID`: Bedrock model ID for sentiment categorization (default: `meta.llama3-8b-instruct-v1:0`)
+- `CATEGORIZATION_MODEL_ID`: Bedrock model ID for categorization (default: `meta.llama3-8b-instruct-v1:0`)
 - `SUMMARIZATION_MODEL_ID`: Bedrock model ID for text summarization (default: `anthropic.claude-3-sonnet-20240229-v1:0`)
 - `BEDROCK_REGION`: AWS region for Bedrock (defaults to AWS_REGION)
 - `REDDIT_CLIENT_ID`: Reddit API Client ID (required for Reddit integration)
@@ -215,7 +214,7 @@ Create a `.env` file (based on `.env.example`) with your configuration:
 
 ### Model Selection Guide
 
-#### For Categorization (Sentiment Analysis)
+#### For Categorization (Analysis)
 **Recommended: Llama Models** (fast, efficient, cost-effective)
 - `meta.llama3-8b-instruct-v1:0` (default - recommended for categorization)
 - `meta.llama3-70b-instruct-v1:0` (more capable)
@@ -567,14 +566,14 @@ The system consists of two independent Lambda functions that work together:
    - Reads posts that were stored by the Reddit Fetcher function
    - Extracts content (title + selftext) from each post for analysis
 
-2. **Categorization**: Each post is analyzed using the **categorization model** (default: Llama) to determine sentiment
-   - Sentiment is categorized as: **Positive**, **Negative**, **Neutral**, or **Mixed**
+2. **Categorization**: Each post is analyzed using the **categorization model** (default: Llama) to determine category
+   - Group is categorized as: (https://github.com/Vin-dictive/ubc-reddit-reporter/blob/main/src/prompts/classify_post.jinja)
    - Each categorization includes confidence score and reasoning
 
 3. **Summarization**: All posts are combined and summarized using the **summarization model** (default: Claude)
    - Generates comprehensive summary with main themes, key insights, and overall tone
 
-4. **Aggregation**: Sentiment categorizations are aggregated with distribution and percentages
+4. **Aggregation**: Categorizations are aggregated with distribution and percentages
 
 5. **Storage**: Results are saved to S3 in `reports/` prefix
 
